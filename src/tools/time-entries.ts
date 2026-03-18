@@ -69,7 +69,7 @@ const listTimeEntriesSchema = z.object({
   project_id: z.string().optional(),
   task_id: z.string().optional(),
   service_id: z.string().optional(),
-  limit: z.number().min(1).max(200).default(30).optional(),
+  limit: z.coerce.number().min(1).max(200).default(30).optional(),
 });
 
 const createTimeEntrySchema = z.object({
@@ -85,12 +85,12 @@ const createTimeEntrySchema = z.object({
 
 const listServicesSchema = z.object({
   company_id: z.string().optional(),
-  limit: z.number().min(1).max(200).default(30).optional(),
+  limit: z.coerce.number().min(1).max(200).default(30).optional(),
 });
 
 const getProjectServicesSchema = z.object({
   project_id: z.string().min(1, 'Project ID is required'),
-  limit: z.number().min(1).max(200).default(30).optional(),
+  limit: z.coerce.number().min(1).max(200).default(30).optional(),
 });
 
 export async function listTimeEntresTool(
@@ -441,16 +441,9 @@ export async function getProjectServicesTool(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
     const params = getProjectServicesSchema.parse(args);
-    
-    // First get the project to verify it exists and get company info
-    const projectResponse = await client.listProjects({
-      limit: 1,
-    });
-    
-    // Then get services for the project's company
-    // Note: This is a simplified approach - in practice you might need
-    // to get the project details first to find its company
+
     const response = await client.listServices({
+      project_id: params.project_id,
       limit: params.limit,
     });
     
@@ -610,8 +603,8 @@ export const listServicesDefinition = {
 // Zod schema for list project deals/budgets
 const listProjectDealsSchema = z.object({
   project_id: z.string().min(1, 'Project ID is required'),
-  budget_type: z.number().int().min(1).max(2).optional().describe('Budget type: 1 = deal, 2 = budget'),
-  limit: z.number().min(1).max(200).default(30).optional(),
+  budget_type: z.coerce.number().int().min(1).max(2).optional().describe('Budget type: 1 = deal, 2 = budget'),
+  limit: z.coerce.number().min(1).max(200).default(30).optional(),
 });
 
 // Tool function for list project deals/budgets
@@ -675,7 +668,7 @@ export async function listProjectDealsTool(
 // Zod schema for list deal services
 const listDealServicesSchema = z.object({
   deal_id: z.string().min(1, 'Deal/Budget ID is required'),
-  limit: z.number().min(1).max(200).default(30).optional(),
+  limit: z.coerce.number().min(1).max(200).default(30).optional(),
 });
 
 // Tool function for list deal services

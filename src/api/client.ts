@@ -595,13 +595,18 @@ export class ProductiveAPIClient {
    */
   async listServices(params?: {
     company_id?: string;
+    project_id?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveService>> {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.company_id) {
       queryParams.append('filter[company_id]', params.company_id);
+    }
+
+    if (params?.project_id) {
+      queryParams.append('filter[project_id]', params.project_id);
     }
     
     if (params?.limit) {
