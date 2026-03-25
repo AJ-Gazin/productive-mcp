@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { ProductiveTimeEntryCreate } from '../api/types.js';
+import { ProductiveTimeEntryCreate, ProductiveTimeEntryUpdate } from '../api/types.js';
 
 // Helper function to parse time input into minutes
 function parseTimeToMinutes(timeInput: string): number {
@@ -597,6 +597,209 @@ export const listServicesDefinition = {
       },
     },
     required: [],
+  },
+};
+
+const updateTimeEntrySchema = z.object({
+  time_entry_id: z.string().min(1, 'Time entry ID is required'),
+  date: z.string().optional(),
+  time: z.string().optional(),
+  note: z.string().optional(),
+  billable_time: z.string().optional(),
+  confirm: z.boolean().optional().default(false),
+});
+
+const deleteTimeEntrySchema = z.object({
+  time_entry_id: z.string().min(1, 'Time entry ID is required'),
+  confirm: z.boolean().optional().default(false),
+});
+
+export async function updateTimeEntryTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = updateTimeEntrySchema.parse(args);
+
+    // Parse time if provided
+    let timeInMinutes: number | undefined;
+    if (params.time) {
+      timeInMinutes = parseTimeToMinutes(params.time);
+    }
+
+    // Parse billable time if provided
+    let billableTimeInMinutes: number | undefined;
+    if (params.billable_time) {
+      billableTimeInMinutes = parseTimeToMinutes(params.billable_time);
+    }
+
+    // Parse date if provided
+    let parsedDate: string | undefined;
+    if (params.date) {
+      parsedDate = parseDate(params.date);
+    }
+
+    if (!params.confirm) {
+      const changes: string[] = [];
+      if (parsedDate) changes.push(`Date: ${parsedDate}`);
+      if (timeInMinutes !== undefined) {
+        const h = Math.floor(timeInMinutes / 60);
+        const m = timeInMinutes % 60;
+        changes.push(`Time: ${h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`}`);
+      }
+      if (billableTimeInMinutes !== undefined) {
+        const h = Math.floor(billableTimeInMinutes / 60);
+        const m = billableTimeInMinutes % 60;
+        changes.push(`Billable Time: ${h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`}`);
+      }
+      if (params.note !== undefined) changes.push(`Note: ${params.note}`);
+
+      if (changes.length === 0) {
+        return {
+          content: [{ type: 'text', text: 'No changes specified. Provide at least one field to update (date, time, note, billable_time).' }],
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Update Time Entry ${params.time_entry_id}:\n\n${changes.join('\n')}\n\nTo apply, call this tool again with the same parameters and add "confirm": true`,
+        }],
+      };
+    }
+
+    const updateData: ProductiveTimeEntryUpdate = {
+      data: {
+        type: 'time_entries',
+        id: params.time_entry_id,
+        attributes: {
+          ...(parsedDate && { date: parsedDate }),
+          ...(timeInMinutes !== undefined && { time: timeInMinutes }),
+          ...(billableTimeInMinutes !== undefined && { billable_time: billableTimeInMinutes }),
+          ...(params.note !== undefined && { note: params.note }),
+        },
+      },
+    };
+
+    const response = await client.updateTimeEntry(updateData);
+
+    const hours = Math.floor(response.data.attributes.time / 60);
+    const minutes = response.data.attributes.time % 60;
+    const timeDisplay = hours > 0
+      ? (minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`)
+      : `${minutes}m`;
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Time entry ${response.data.id} updated successfully!\nDate: ${response.data.attributes.date}\nTime: ${timeDisplay}\nNote: ${response.data.attributes.note || 'No note'}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error occurred'
+    );
+  }
+}
+
+export async function deleteTimeEntryTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = deleteTimeEntrySchema.parse(args);
+
+    if (!params.confirm) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Are you sure you want to delete time entry ${params.time_entry_id}? This cannot be undone.\n\nTo confirm, call this tool again with "confirm": true`,
+        }],
+      };
+    }
+
+    await client.deleteTimeEntry(params.time_entry_id);
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Time entry ${params.time_entry_id} deleted successfully.`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error occurred'
+    );
+  }
+}
+
+export const updateTimeEntryDefinition = {
+  name: 'update_time_entry',
+  description: 'Update an existing time entry. Can modify date, time, note, and billable_time. Only works on entries that have not been submitted or approved. Requires confirmation before applying changes.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      time_entry_id: {
+        type: 'string',
+        description: 'The ID of the time entry to update (required)',
+      },
+      date: {
+        type: 'string',
+        description: 'New date. Accepts "today", "yesterday", or YYYY-MM-DD format',
+      },
+      time: {
+        type: 'string',
+        description: 'New time duration. Accepts "2h", "120m", "2.5h", or "2.5" (assumed hours)',
+      },
+      note: {
+        type: 'string',
+        description: 'New work description',
+      },
+      billable_time: {
+        type: 'string',
+        description: 'New billable time duration, same format as time field',
+      },
+      confirm: {
+        type: 'boolean',
+        description: 'Set to true to confirm and apply the update. First call without this to see what will change.',
+        default: false,
+      },
+    },
+    required: ['time_entry_id'],
+  },
+};
+
+export const deleteTimeEntryDefinition = {
+  name: 'delete_time_entry',
+  description: 'Delete an existing time entry. This cannot be undone. Only works on entries that have not been submitted or approved. Requires confirmation before deleting.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      time_entry_id: {
+        type: 'string',
+        description: 'The ID of the time entry to delete (required)',
+      },
+      confirm: {
+        type: 'boolean',
+        description: 'Set to true to confirm deletion. First call without this to see confirmation prompt.',
+        default: false,
+      },
+    },
+    required: ['time_entry_id'],
   },
 };
 
