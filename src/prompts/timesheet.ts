@@ -32,20 +32,19 @@ export async function generateTimesheetPrompt(args: unknown): Promise<{
     const workflowGuidance = `I'll help you create a timesheet entry${projectHint}${dateHint}${timeHint}. 
 
 **TIMESHEET WORKFLOW OVERVIEW:**
-This requires 5 steps to ensure your time is logged to the correct budget and service:
+This requires 4 steps to ensure your time is logged to the correct service:
 
 1. **🏢 Project Selection** - Find the right project
-2. **💰 Budget/Deal Selection** - Choose the correct budget or deal within the project  
-3. **⚙️ Service Selection** - Pick the specific service type for this work
-4. **📋 Task Selection** - Link to a specific task (recommended)
-5. **📝 Time Entry Creation** - Preview and confirm your time entry before creation
+2. **⚙️ Service Selection** - Pick the correct service for this work (via get_project_services)
+3. **📋 Task Selection** - Link to a specific task (recommended)
+4. **📝 Time Entry Creation** - Preview and confirm your time entry before creation
 
 **IMPORTANT: CONFIRMATION REQUIRED**
 In Step 5, I will show you exactly what will be created and ask for your confirmation before actually logging the time. This prevents accidental entries.
 
 **WHY THIS WORKFLOW?**
-Productive.io follows a strict hierarchy: Project → Budget/Deal → Service → Task → Time Entry
-Each time entry must be linked to a specific service within a budget to ensure proper billing and tracking.
+Productive.io follows a hierarchy: Project → Service → Time Entry
+Each time entry must be linked to a specific service to ensure proper billing and tracking.
 
 Let's start the workflow:`;
 
@@ -106,18 +105,13 @@ Please tell me which project you worked on, or I can list all active projects fo
         text: `**NEXT STEPS PREVIEW:**
 
 **Step 2:** Once we have your project_id, I'll run:
-\`list_project_deals project_id="[PROJECT_ID]"\` to show budgets/deals for that project
+\`get_project_services project_id="[PROJECT_ID]"\` to show available services for that project
 
-**Step 3:** After you select a budget, I'll run:
-\`list_deal_services deal_id="[DEAL_ID]"\` to show available services
-
-**Step 4:** With the project_id, I'll run:
+**Step 3:** With the project_id, I'll run:
 \`get_project_tasks project_id="[PROJECT_ID]"\` to show tasks you can link to (recommended)
 
-**Step 5:** Finally, I'll prepare your time entry for confirmation:
+**Step 4:** Finally, I'll prepare your time entry for confirmation:
 \`create_time_entry\` with all the selected details plus your detailed work description
-- First call: Shows you a preview of what will be created
-- You confirm: I'll call again with \`confirm: true\` to actually create the entry
 
 **CONFIRMATION PROCESS:**
 Before any time is logged, you'll see:
@@ -128,7 +122,7 @@ Before any time is logged, you'll see:
 
 Only after you explicitly confirm will the time entry be created.
 
-**READY TO START?** 
+**READY TO START?**
 Tell me the project name or say "list projects" to see all available projects.`
       }
     });
@@ -155,9 +149,8 @@ Tell me the project name or say "list projects" to see all available projects.`
 
 // Schema for quick timesheet prompt
 const quickTimesheetSchema = z.object({
-  step: z.enum(['project', 'budget', 'service', 'task', 'create']).describe('Current step in workflow'),
+  step: z.enum(['project', 'service', 'task', 'create']).describe('Current step in workflow'),
   project_id: z.string().optional().describe('Selected project ID'),
-  deal_id: z.string().optional().describe('Selected deal/budget ID'),  
   service_id: z.string().optional().describe('Selected service ID'),
   task_id: z.string().optional().describe('Selected task ID'),
 });
@@ -187,24 +180,19 @@ export async function generateQuickTimesheetPrompt(args: unknown): Promise<{
         nextAction = 'Use: `list_projects` to see available projects, then tell me the project name or ID.';
         break;
         
-      case 'budget':
-        stepGuidance = '**STEP 2: 💰 BUDGET/DEAL SELECTION**\nNow I need to find the correct budget or deal for this project.';
-        nextAction = `Use: \`list_project_deals project_id="${params.project_id}"\` to see available budgets/deals.`;
-        break;
-        
       case 'service':
-        stepGuidance = '**STEP 3: ⚙️ SERVICE SELECTION**\nTime to pick the specific service type for your work.';
-        nextAction = `Use: \`list_deal_services deal_id="${params.deal_id}"\` to see services for this budget.`;
+        stepGuidance = '**STEP 2: ⚙️ SERVICE SELECTION**\nI need to find the available services for this project.';
+        nextAction = `Use: \`get_project_services project_id="${params.project_id}"\` to see services for this project.`;
         break;
-        
+
       case 'task':
-        stepGuidance = '**STEP 4: 📋 TASK SELECTION (Recommended)**\nLet\'s link your time to a specific task.';
+        stepGuidance = '**STEP 3: 📋 TASK SELECTION (Recommended)**\nLet\'s link your time to a specific task.';
         nextAction = `Use: \`get_project_tasks project_id="${params.project_id}"\` to see available tasks.`;
         break;
-        
+
       case 'create':
-        stepGuidance = '**STEP 5: 📝 CREATE TIME ENTRY WITH CONFIRMATION**\nReady to preview and confirm your time entry before creation.';
-        nextAction = `Use: \`create_time_entry\` with service_id="${params.service_id}"${params.task_id ? `, task_id="${params.task_id}"` : ''}, detailed notes, date, and time.\n\n**IMPORTANT CONFIRMATION PROCESS:**\n1. First call without \`confirm: true\` - Shows preview of what will be created\n2. Review the details carefully\n3. If correct, call again with \`confirm: true\` to actually create the entry\n\nThis two-step process prevents accidental time entries.`;
+        stepGuidance = '**STEP 4: 📝 CREATE TIME ENTRY WITH CONFIRMATION**\nReady to preview and confirm your time entry before creation.';
+        nextAction = `Use: \`create_time_entry\` with service_id="${params.service_id}"${params.task_id ? `, task_id="${params.task_id}"` : ''}, detailed notes, date, and time.`;
         break;
     }
 
@@ -255,14 +243,14 @@ ${nextAction}
 }
 
 function getProgressIndicator(currentStep: string): string {
-  const steps = ['project', 'budget', 'service', 'task', 'create'];
+  const steps = ['project', 'service', 'task', 'create'];
   const currentIndex = steps.indexOf(currentStep);
-  
+
   return steps.map((_, index) => {
     if (index < currentIndex) return '✅';
     if (index === currentIndex) return '🔄';
     return '⏳';
-  }).join(' ') + ` (Step ${currentIndex + 1}/5)`;
+  }).join(' ') + ` (Step ${currentIndex + 1}/4)`;
 }
 
 export const timesheetPromptDefinition = {
@@ -304,11 +292,6 @@ export const quickTimesheetPromptDefinition = {
     {
       name: 'project_id',
       description: 'Project ID if already selected',
-      required: false,
-    },
-    {
-      name: 'deal_id',
-      description: 'Deal/Budget ID if already selected',
       required: false,
     },
     {

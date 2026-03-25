@@ -535,7 +535,7 @@ export const listTimeEntriesDefinition = {
 
 export const createTimeEntryDefinition = {
   name: 'create_time_entry',
-  description: 'STEP 5 (FINAL) of timesheet workflow: Create a time entry with detailed work description. COMPLETE WORKFLOW: 1) list_projects → 2) list_project_deals → 3) list_deal_services → 4) list_project_tasks (recommended) → 5) create_time_entry. You MUST provide: valid service_id from the hierarchy, detailed work notes (minimum 10 chars), and optionally link to a specific task_id. This tool requires confirmation before creating. If PRODUCTIVE_USER_ID is configured, use "me" for person_id.',
+  description: 'Create a time entry. Recommended workflow: 1) list_projects → 2) get_project_services → 3) create_time_entry. Provide a valid service_id from get_project_services, detailed work notes, date, time in minutes, and person_id ("me" if PRODUCTIVE_USER_ID is configured). Optionally link to a task_id.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -580,7 +580,7 @@ export const createTimeEntryDefinition = {
 
 export const listServicesDefinition = {
   name: 'list_services',
-  description: 'List all services in the organization. NOTE: For timesheet entries, use the proper workflow instead: list_projects → list_project_deals → list_deal_services → create_time_entry. This tool shows all services but does not indicate which project/budget they belong to.',
+  description: 'List all services in the organization. For project-specific services, use get_project_services instead.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -927,7 +927,7 @@ export async function listDealServicesTool(
 
 export const listProjectDealsDefinition = {
   name: 'list_project_deals',
-  description: 'STEP 2 of timesheet workflow: Get deals/budgets for a specific project. COMPLETE WORKFLOW: 1) list_projects → 2) list_project_deals → 3) list_deal_services → 4) list_project_tasks (recommended) → 5) create_time_entry. This follows: Project → Deal/Budget → Service → Task → Time Entry.',
+  description: 'Get deals/budgets for a specific project. Note: some API tokens may not have permission for this endpoint — use get_project_services as an alternative.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -955,7 +955,7 @@ export const listProjectDealsDefinition = {
 
 export const listDealServicesDefinition = {
   name: 'list_deal_services',
-  description: 'STEP 3 of timesheet workflow: Get services for a specific deal/budget. COMPLETE WORKFLOW: 1) list_projects → 2) list_project_deals → 3) list_deal_services → 4) list_project_tasks (recommended) → 5) create_time_entry. After this, optionally use list_project_tasks to find specific tasks to link your time entry to.',
+  description: 'Get services for a specific deal/budget. Alternative: use get_project_services to get services directly by project ID.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -977,7 +977,7 @@ export const listDealServicesDefinition = {
 
 export const getProjectServicesDefinition = {
   name: 'get_project_services',
-  description: 'DEPRECATED: Use the proper workflow instead: list_projects → list_project_deals → list_deal_services → create_time_entry. This tool does not properly handle the project → deal/budget → service hierarchy required for timesheet entries.',
+  description: 'Get services available for a specific project. This is the recommended way to find the correct service_id for creating time entries. Filters services by project ID to return only relevant services.',
   inputSchema: {
     type: 'object',
     properties: {
